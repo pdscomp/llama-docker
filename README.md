@@ -1,6 +1,8 @@
 # llama-docker: Router Mode LLM Server with NVIDIA CUDA & AMD Vulkan Support
 
-A Docker-based template for running **llama.cpp llama-server** in router mode with support for NVIDIA CUDA (NVIDIA GPUs) and AMD Vulkan (AMD integrated graphics). Optimized for high-performance inference with 24GB or more of VRAM.
+A Docker-based template for running **llama.cpp llama-server** in router mode with support for NVIDIA CUDA (NVIDIA GPUs) and AMD Vulkan (AMD integrated graphics). Optimized for high-performance inference with 24GB or more of VRAM using **TurboQuant** technology.
+
+> **TurboQuant** is advanced KV cache quantization technology developed primarily by GitHub contributors [TheTom](https://github.com/TheTom) and [SpiritBuun](https://github.com/spiritbuun), enabling efficient long-context inference with minimal quality loss.
 
 ## Features
 
