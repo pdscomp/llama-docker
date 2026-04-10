@@ -1,0 +1,41 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Head -->
+  <circle cx="100" cy="70" r="40" fill="#F5DEB3"/>
+  
+  <!-- Ears -->
+  <ellipse cx="80" cy="30" rx="12" ry="20" fill="#F5DEB3"/>
+  <ellipse cx="120" cy="30" rx="12" ry="20" fill="#F5DEB3"/>
+  <ellipse cx="80" cy="32" rx="6" ry="12" fill="#FFE4C4"/>
+  <ellipse cx="120" cy="32" rx="6" ry="12" fill="#FFE4C4"/>
+  
+  <!-- Snout -->
+  <ellipse cx="100" cy="85" rx="25" ry="20" fill="#F5DEB3"/>
+  <circle cx="92" cy="90" r="3" fill="#333"/>
+  <circle cx="108" cy="90" r="3" fill="#333"/>
+  
+  <!-- Eyes -->
+  <circle cx="85" cy="65" r="5" fill="#333"/>
+  <circle cx="115" cy="65" r="5" fill="#333"/>
+  <circle cx="86" cy="64" r="2" fill="#fff"/>
+  <circle cx="116" cy="64" r="2" fill="#fff"/>
+  
+  <!-- Body -->
+  <ellipse cx="100" cy="140" rx="35" ry="45" fill="#F5DEB3"/>
+  
+  <!-- Legs -->
+  <rect x="75" y="170" width="12" height="30" rx="6" fill="#D2B48C"/>
+  <rect x="95" y="170" width="12" height="30" rx="6" fill="#D2B48C"/>
+  <rect x="113" y="170" width="12" height="30" rx="6" fill="#D2B48C"/>
+  
+  <!-- Tail -->
+  <path d="M 135 130 Q 160 125 165 100" stroke="#D2B48C" stroke-width="8" fill="none" stroke-linecap="round"/>
+  
+  <!-- Blanket/Saddle -->
+  <path d="M 70 120 Q 100 110 130 120 L 130 150 Q 100 155 70 150 Z" fill="#FF6B9D" opacity="0.8"/>
+  <circle cx="80" cy="130" r="4" fill="#FFD700"/>
+  <circle cx="100" cy="125" r="4" fill="#FFD700"/>
+  <circle cx="120" cy="130" r="4" fill="#FFD700"/>
+  
+  <!-- Smile -->
+  <path d="M 95 95 Q 100 100 105 95" stroke="#333" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+</svg>
