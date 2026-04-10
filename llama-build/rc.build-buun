@@ -1,0 +1,7 @@
+#!/bin/bash -x
+cd buun-llama-cpp
+git pull
+docker build \
+  -f .devops/cuda-turbo.Dockerfile \
+  --target server \
+  -t llama.cpp:server-cuda-turbo .

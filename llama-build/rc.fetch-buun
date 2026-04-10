@@ -1,0 +1,3 @@
+#!/bin/bash -x
+git clone https://github.com/spiritbuun/buun-llama-cpp.git
+cp -f cuda-turbo.Dockerfile ./buun-llama-cpp/.devops/

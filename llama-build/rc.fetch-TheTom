@@ -1,0 +1,3 @@
+#!/bin/bash -x
+git clone https://github.com/TheTom/llama-cpp-turboquant.git -b feature/turboquant-kv-cache
+cp -f cuda-turbo.Dockerfile ./llama-cpp-turboquant/.devops/
