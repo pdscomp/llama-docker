@@ -101,6 +101,8 @@ docker compose logs -f
 
 The server will be available at `http://localhost:8080`.
 
+Once the service is running, you can open the built-in llama.cpp web UI at `http://<server-hostname>:8080` to quickly test prompts in a browser (`localhost` if you're running it on the same machine).
+
 ### API Access
 
 - **Health Check**: `curl http://localhost:8080/health`
@@ -192,6 +194,8 @@ curl http://localhost:8080/health  # Wait for healthy status
 ```
 
 The server will load the model specified by `load-on-startup = true` in `config.ini`.
+
+For a quick smoke test from a browser, open `http://<server-hostname>:8080` (or `http://localhost:8080` locally) to use the llama.cpp web portal.
 
 ### Generate Completions
 
