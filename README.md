@@ -53,6 +53,17 @@ Both forks support turboquant and work well with the configurations provided. Th
 
 Place GGUF model files in the `./models` directory. Models are automatically downloaded by the server based on the configuration in `config.ini` using Hugging Face Hub integration.
 
+> **Pro Tip (faster Hugging Face downloads):** You can pre-download models much faster with `huggingface_hub` + `hf_transfer` (often ~10x faster), and write directly into `./models`, which is where the llama.cpp container already expects them.
+>
+> ```bash
+> pipx install --force "huggingface_hub[hf_transfer]"
+> hf auth login  # Enter your HuggingFace API key (login via web)
+>
+> # Fast-download Qwen3.6-35b-MoE and Gemma-4-31B
+> HF_HUB_CACHE=$PWD/models HF_HUB_ENABLE_HF_TRANSFER=1 hf download unsloth/Qwen3.6-35B-A3B-GGUF Qwen3.6-35B-A3B-UD-Q4_K_M.gguf
+> HF_HUB_CACHE=$PWD/models HF_HUB_ENABLE_HF_TRANSFER=1 hf download unsloth/gemma-4-31B-it-GGUF gemma-4-31B-it-Q4_K_S.gguf
+> ```
+
 ## Quick Start
 
 ### 1. Build the Docker Image
@@ -69,6 +80,7 @@ cd llama-build
 
 Edit `config.ini` to specify:
 - Models to load (name, Hugging Face repository, quantization)
+- Which model should load automatically at startup (`load-on-startup`)
 - Server settings (port, context size, KV cache strategy)
 - Performance tuning (GPU layers, parallel slots, etc.)
 
@@ -80,8 +92,10 @@ port = 8080
 ctx-size = 262144
 cache-type-k = q8_0        # K-cache: full 8-bit quantization
 cache-type-v = turbo4      # V-cache: aggressive turbo4 quantization
+flash-attn = true
 fit = on
-n-gpu-layers = 99
+fit-target = 256
+n-gpu-layers = 999
 models-max = 1
 parallel = 1
 ```
@@ -102,6 +116,7 @@ docker compose logs -f
 The server will be available at `http://localhost:8080`.
 
 Once the service is running, you can open the built-in llama.cpp web UI at `http://<server-hostname>:8080` to quickly test prompts in a browser (`localhost` if you're running it on the same machine).
+No model is auto-loaded at startup right now, so the first model you select in the web UI will be the one that gets loaded.
 
 ### API Access
 
@@ -116,8 +131,9 @@ Once the service is running, you can open the built-in llama.cpp web UI at `http
 - **`compose.yml`**: No functional changes from the original template. It still runs `llama.cpp:server-cuda-turbo`, exposes `8080:8080`, mounts `./models` and `./config.ini`, and starts with `--models-preset /config.ini`.
 - **`config.ini`**:
   - Added/tuned GPU-offload settings: `flash-attn = true`, `fit-target = 256`, and `n-gpu-layers` increased from `99` to `999`.
-  - Default startup model moved from `[Qwen3.5-27B]` to `[Qwen3.6-35B-MoE]` (`load-on-startup = true` now set there).
+  - Disabled auto-loading on startup by commenting out `load-on-startup`, so the first model selected in the web UI/API is loaded.
   - MoE preset quantization updated to `Q4_K_M` (`Qwen3.5-35B-MoE` changed from `...Q4_K_XL.gguf` to `...Q4_K_M.gguf`), and a new `[Qwen3.6-35B-MoE]` preset was added.
+  - Added `[Gemma-4-31B-IT]` preset (`unsloth/gemma-4-31B-it-GGUF`) with `Q4_K_S`, model-level `turbo4/turbo4` cache override, and reduced `ctx-size = 224000` for 24GB VRAM.
   - CPU thread tuning guidance changed to prefer leaving `threads`/`threads-batch` commented on asymmetric-core systems.
 
 ## Configuration Guide
@@ -126,8 +142,20 @@ Once the service is running, you can open the built-in llama.cpp web UI at `http
 
 Based on testing with a 24GB NVIDIA RTX 3090:
 
-Presets for Qwen3.5-27b (dense), Qwen3.5-35b-MoE, and Qwen3.6-35b-MoE.
-Change which one loads on boot by editing bottom of `config.ini` and restarting.
+Presets for Qwen3.5-27b (dense), Qwen3.5-35b-MoE, Qwen3.6-35b-MoE, and Gemma-4-31B-IT.
+
+### Selecting the Default Startup Model (Optional)
+
+No model is currently configured to auto-load on startup. This means the first model you pick in the llama.cpp web UI (or via `POST /model/load`) is what will load.
+
+To change the default model, uncomment this one line in the model section you want:
+
+```ini
+# load-on-startup = true
+```
+
+Keep `load-on-startup = true` enabled for only one model section, then restart the container (`./rc.stop && ./rc.start`).
+Setting a default startup model is especially useful with agent workflows (for example Hermes, OpenClaw, or OpenCode), so your preferred model is already loaded and ready to serve requests immediately.
 
 **Best Quality + Performance** (Default):
 - **K-cache**: `q8_0` (full 8-bit precision)
