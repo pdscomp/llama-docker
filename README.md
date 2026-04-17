@@ -109,16 +109,28 @@ The server will be available at `http://localhost:8080`.
 - **Slots API**: `GET /slots` to inspect active inference slots
 - **Full Documentation**: See [llama.cpp API documentation](https://github.com/ggerganov/llama.cpp/blob/master/examples/server/README.md)
 
+## Important Changes Since the Original Template
+
+- **`compose.yml`**: No functional changes from the original template. It still runs `llama.cpp:server-cuda-turbo`, exposes `8080:8080`, mounts `./models` and `./config.ini`, and starts with `--models-preset /config.ini`.
+- **`config.ini`**:
+  - Added/tuned GPU-offload settings: `flash-attn = true`, `fit-target = 256`, and `n-gpu-layers` increased from `99` to `999`.
+  - Default startup model moved from `[Qwen3.5-27B]` to `[Qwen3.6-35B-MoE]` (`load-on-startup = true` now set there).
+  - MoE preset quantization updated to `Q4_K_M` (`Qwen3.5-35B-MoE` changed from `...Q4_K_XL.gguf` to `...Q4_K_M.gguf`), and a new `[Qwen3.6-35B-MoE]` preset was added.
+  - CPU thread tuning guidance changed to prefer leaving `threads`/`threads-batch` commented on asymmetric-core systems.
+
 ## Configuration Guide
 
 ### Recommended Configurations
 
 Based on testing with a 24GB NVIDIA RTX 3090:
 
+Presets for Qwen3.5-27b (dense), Qwen3.5-35b-MoE, and Qwen3.6-35b-MoE.
+Change which one loads on boot by editing bottom of `config.ini` and restarting.
+
 **Best Quality + Performance** (Default):
 - **K-cache**: `q8_0` (full 8-bit precision)
 - **V-cache**: `turbo4` (4-bit quantization)
-- **Quantization**: Q4_K_XL
+- **Quantization**: Q4_K_M (better perplexity than Q4_K_XL which also fits?)
 - **Context**: Up to 256K tokens
 
 **Balanced Configurations to Experiment With**:
@@ -139,7 +151,9 @@ Adjust based on your specific use case:
 | `cache-type-k` | K-cache quantization: `q8_0`, `q4_0`, `turbo4`, etc. |
 | `cache-type-v` | V-cache quantization: `turbo4`, `turbo3`, etc. |
 | `kv-unified` | Use shared memory pool for KV cache |
-| `n-gpu-layers` | Number of model layers to offload to GPU (99 = all) |
+| `flash-attn` | Enable Flash Attention for faster attention kernels on supported builds |
+| `fit-target` | VRAM usage target percentage used by `fit = on` |
+| `n-gpu-layers` | Number of model layers to offload to GPU (`999` = effectively all layers) |
 | `models-max` | Maximum simultaneous models (1 = prevent OOM) |
 | `parallel` | Number of concurrent inference slots |
 | `mlock` | Lock model in RAM to prevent swapping |
