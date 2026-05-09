@@ -17,6 +17,7 @@ services:
     volumes:
       - ./models:/models
       - ./models-direct:/models-direct
+      - ./models-mtp:/models-mtp
       - ./config.ini:/config.ini
     environment:
       - CUDA_VISIBLE_DEVICES=0
