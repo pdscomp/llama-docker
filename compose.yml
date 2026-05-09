@@ -16,6 +16,7 @@ services:
       - "8080:8080"
     volumes:
       - ./models:/models
+      - ./models-direct:/models-direct
       - ./config.ini:/config.ini
     environment:
       - CUDA_VISIBLE_DEVICES=0

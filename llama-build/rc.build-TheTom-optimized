@@ -1,0 +1,5 @@
+#!/bin/bash -x
+cd ~/docker/llama-cpp-turboquant
+git pull
+cp -f ~/docker/llama-docker/llama-build/cuda-turbo.Dockerfile .devops/
+docker build   -f .devops/cuda-turbo.Dockerfile   --target server   --build-arg CUDA_DOCKER_ARCH=86   -t llama.cpp:server-cuda-turbo .
