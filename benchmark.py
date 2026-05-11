@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """
-Benchmark llama-server OpenAI-compatible API on legion:8080
+Benchmark llama-server OpenAI-compatible API
+Parameterized via environment variables:
+  LLAMA_BENCH_URL      - base URL (default: http://localhost:8080)
+  LLAMA_BENCH_MODEL    - model name (default: Qwen3.6-35B-MoE)
+  LLAMA_BENCH_BACKEND  - backend tag for results (default: vulkan)
+  LLAMA_IMAGE          - docker image tag for results (default: unknown)
 Uses only stdlib (no requests dependency).
-Handles Qwen3.6 reasoning_content + content delta fields.
 """
-import time, json, sys, statistics, urllib.request
+import os, time, json, sys, statistics, urllib.request
 
-BASE = "http://legion.home.swenson.co:8080"
-MODEL = "Qwen3.6-27B"
+BASE = os.environ.get("LLAMA_BENCH_URL", "http://localhost:8080")
+MODEL = os.environ.get("LLAMA_BENCH_MODEL", "Qwen3.6-35B-MoE")
+BACKEND = os.environ.get("LLAMA_BENCH_BACKEND", "vulkan")
+IMAGE = os.environ.get("LLAMA_IMAGE", "unknown")
 
 def api_call(path, payload=None, method="GET", timeout=300, expect_json=True):
     url = f"{BASE}{path}"
@@ -90,12 +96,19 @@ def non_stream_chat(messages, max_tokens=256):
         print(f"  ERROR: {e}")
         return None
 
+def make_long_prompt(target_tokens):
+    """Generate a prompt that pre-fills to approximately target_tokens tokens."""
+    # Rough heuristic: ~4 chars per token for English text
+    para = "The quick brown fox jumps over the lazy dog. " * 50
+    repeats = max(1, target_tokens // 200)
+    return [{"role": "user", "content": (para + "\n") * repeats}]
+
 def run():
     try:
         health = api_call("/health", expect_json=False)
         print(f"Server health: {health.strip()}")
     except Exception as e:
-        print(f"Server not responding: {e}")
+        print(f"Server not responding at {BASE}: {e}")
         sys.exit(1)
 
     try:
@@ -105,12 +118,12 @@ def run():
     except Exception:
         pass
 
+    print(f"\n=== Benchmarking {MODEL} ({BACKEND}/{IMAGE}) ===")
+    results = []
+    
     short_prompt = [{"role": "user", "content": "Say exactly: one two three four five six seven eight nine ten."}]
     medium_prompt = [{"role": "user", "content": "Explain quantum computing in exactly three sentences."}]
     long_prompt = [{"role": "user", "content": "Write a detailed analysis of the causes and consequences of the 2008 financial crisis, covering housing bubble, subprime mortgages, and global impact. Be thorough."}]
-    
-    print(f"\n=== Benchmarking llama.cpp ({MODEL}) ===")
-    results = []
     
     print("\n[1] Short prompt + 128 tok gen (stream)...")
     res = stream_chat(short_prompt, max_tokens=128)
@@ -137,6 +150,22 @@ def run():
     results.append(res)
     print(f"  TTFT: {res['ttft_ms']}ms | Tokens: {res['tokens']} | Total: {res['total_s']}s | Gen: {res['gen_tok_s']} tok/s")
 
+    # 65K smoke test
+    print("\n[5] 65K context prefill + 128 tok gen (smoke test)...")
+    prefill_65k = make_long_prompt(10000)  # ~10K tokens prefill
+    res = stream_chat(prefill_65k, max_tokens=128)
+    res["name"] = "long_context_65k_prefill"
+    results.append(res)
+    print(f"  TTFT: {res['ttft_ms']}ms | Tokens: {res['tokens']} | Total: {res['total_s']}s | Gen: {res['gen_tok_s']} tok/s")
+
+    # 256K stress test (if context configured high enough)
+    print("\n[6] 256K context prefill + 128 tok gen (stress test)...")
+    prefill_256k = make_long_prompt(50000)  # ~50K tokens prefill
+    res = stream_chat(prefill_256k, max_tokens=128)
+    res["name"] = "long_context_256k_prefill"
+    results.append(res)
+    print(f"  TTFT: {res['ttft_ms']}ms | Tokens: {res['tokens']} | Total: {res['total_s']}s | Gen: {res['gen_tok_s']} tok/s")
+
     print("\n=== Summary ===")
     gen_rates = [r["gen_tok_s"] for r in results]
     print(f"Best generation throughput: {max(gen_rates)} tok/s")
@@ -144,6 +173,7 @@ def run():
     for r in results:
         print(f"  {r['name']}: {r['gen_tok_s']} tok/s (TTFT: {r['ttft_ms']}ms)")
 
+    # Append to results history with metadata
     try:
         with open("benchmark_results.json", "r") as f:
             history = json.load(f)
@@ -152,7 +182,12 @@ def run():
     
     from datetime import datetime
     timestamp = datetime.now().isoformat()
-    history[timestamp] = results
+    history[timestamp] = {
+        "backend": BACKEND,
+        "image": IMAGE,
+        "model": MODEL,
+        "results": results,
+    }
     
     with open("benchmark_results.json", "w") as f:
         json.dump(history, f, indent=2)
