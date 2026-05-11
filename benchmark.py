@@ -160,11 +160,15 @@ def run():
 
     # 256K stress test (if context configured high enough)
     print("\n[6] 256K context prefill + 128 tok gen (stress test)...")
-    prefill_256k = make_long_prompt(50000)  # ~50K tokens prefill
-    res = stream_chat(prefill_256k, max_tokens=128)
-    res["name"] = "long_context_256k_prefill"
-    results.append(res)
-    print(f"  TTFT: {res['ttft_ms']}ms | Tokens: {res['tokens']} | Total: {res['total_s']}s | Gen: {res['gen_tok_s']} tok/s")
+    try:
+        prefill_256k = make_long_prompt(50000)  # ~50K tokens prefill
+        res = stream_chat(prefill_256k, max_tokens=128)
+        res["name"] = "long_context_256k_prefill"
+        results.append(res)
+        print(f"  TTFT: {res['ttft_ms']}ms | Tokens: {res['tokens']} | Total: {res['total_s']}s | Gen: {res['gen_tok_s']} tok/s")
+    except Exception as e:
+        print(f"  SKIPPED: {e}")
+        results.append({"name": "long_context_256k_prefill", "error": str(e), "gen_tok_s": 0})
 
     print("\n=== Summary ===")
     gen_rates = [r["gen_tok_s"] for r in results]

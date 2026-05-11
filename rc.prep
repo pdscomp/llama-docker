@@ -15,11 +15,11 @@ detect_rocm() { command -v rocminfo &>/dev/null || [ -e /dev/kfd ]; }
 # Detect AMD GPU type for HSA override
 detect_amd_gpu() {
     if lspci 2>/dev/null | grep -qi "phoenix"; then
-        echo "11.0.3"
+        echo "11.0.2"
     elif lspci 2>/dev/null | grep -qi "strix"; then
         echo "11.0.4"
     else
-        echo "11.0.3"
+        echo "11.0.2"
     fi
 }
 

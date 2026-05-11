@@ -1,3 +1,5 @@
+services:
+  llama-server:
     deploy:
       resources:
         reservations:

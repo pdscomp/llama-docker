@@ -1,3 +1,5 @@
+services:
+  llama-server:
     security_opt:
       - seccomp=unconfined
     cap_add:
@@ -10,4 +12,4 @@
       - /dev/kfd:/dev/kfd
       - /dev/dri:/dev/dri
     environment:
-      - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-11.0.3}
+      - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-11.0.2}

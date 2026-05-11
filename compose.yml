@@ -10,6 +10,7 @@ services:
       - ./models-direct:/models-direct
       - ./models-mtp:/models-mtp
       - ./config.ini:/config.ini
+      - /home/paul/docker/llama-stack/models:/models-shared:ro
     command: >
         --models-preset /config.ini
     stdin_open: false
