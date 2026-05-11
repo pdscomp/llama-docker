@@ -1,1 +1,21 @@
-docker compose down && docker compose up -d && docker compose logs -f
+#!/usr/bin/env bash
+# Start llama-server with the configured backend
+# Run ./rc.prep first if .env does not exist
+
+set -e
+
+# Run prep silently if .env is missing
+if [[ ! -f .env ]]; then
+    echo "No .env found. Running setup wizard..."
+    ./rc.prep
+fi
+
+# Source .env for any host-side env vars we might need
+# (docker compose auto-reads .env, but this is for rc.start itself)
+if [[ -f .env ]]; then
+    export $(grep -v '^#' .env | grep '=' | xargs)
+fi
+
+docker compose down
+docker compose up -d
+docker compose logs -f

@@ -1,17 +1,8 @@
 services:
   llama-server:
-    #profiles:
-    #  - donotstart
-    image: docker.io/library/llama.cpp:server-cuda-turbo 
+    image: ${LLAMA_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-vulkan}
     container_name: llama-server
     restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     ports:
       - "8080:8080"
     volumes:
@@ -19,9 +10,6 @@ services:
       - ./models-direct:/models-direct
       - ./models-mtp:/models-mtp
       - ./config.ini:/config.ini
-    environment:
-      - CUDA_VISIBLE_DEVICES=0
-      - LLAMA_CACHE=/models
     command: >
         --models-preset /config.ini
     stdin_open: false

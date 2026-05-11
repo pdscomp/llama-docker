@@ -3,3 +3,4 @@ llama-build/buun-llama-cpp
 llama-build/llama-cpp-turboquant
 models-direct/
 models-mtp/
+.hermes/

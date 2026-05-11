@@ -1,0 +1,259 @@
+#!/usr/bin/env bash
+# Interactive setup wizard for llama-docker GPU backend selection
+# Usage: ./rc.prep [--non-interactive <backend> <fork>] [--detect-only]
+
+set -euo pipefail
+
+ENV_FILE=".env"
+EXAMPLE_FILE=".env.example"
+
+# Detect available backends
+detect_cuda() { command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; }
+detect_vulkan() { command -v vulkaninfo &>/dev/null || [ -e /dev/dri/renderD128 ]; }
+detect_rocm() { command -v rocminfo &>/dev/null || [ -e /dev/kfd ]; }
+
+# Detect AMD GPU type for HSA override
+detect_amd_gpu() {
+    if lspci 2>/dev/null | grep -qi "phoenix"; then
+        echo "11.0.3"
+    elif lspci 2>/dev/null | grep -qi "strix"; then
+        echo "11.0.4"
+    else
+        echo "11.0.3"
+    fi
+}
+
+# Available forks
+FORKS=("upstream" "thetom" "buun" "am17an")
+
+# Fork descriptions
+describe_fork() {
+    case "$1" in
+        upstream) echo "vanilla llama.cpp (reliable, all backends)" ;;
+        thetom) echo "TurboQuant fork (turbo24 KV, CUDA + Vulkan experimental)" ;;
+        buun) echo "optimized CUDA fork (turbo4 KV + fattn-mma-turbo)" ;;
+        am17an) echo "MTP speculative decode fork (~60 tok/s on CUDA)" ;;
+        *) echo "unknown fork" ;;
+    esac
+}
+
+# Check if image exists locally
+check_image() {
+    docker image inspect "$1" &>/dev/null
+}
+
+usage() {
+    echo "Usage: $0 [--non-interactive <backend> <fork>] [--detect-only]"
+    echo ""
+    echo "Backends: cuda, vulkan, rocm"
+    echo "Forks:    upstream, thetom, buun, am17an"
+    exit 1
+}
+
+NON_INTERACTIVE=false
+DETECT_ONLY=false
+ARG_BACKEND=""
+ARG_FORK=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --non-interactive)
+            NON_INTERACTIVE=true
+            ARG_BACKEND="${2:-}"
+            ARG_FORK="${3:-upstream}"
+            shift 3 || usage
+            ;;
+        --detect-only)
+            DETECT_ONLY=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            echo "Unknown option: $1"
+            usage
+            ;;
+    esac
+done
+
+# Detection phase
+echo "=== llama-docker setup wizard ==="
+echo ""
+
+HAS_CUDA=false
+HAS_VULKAN=false
+HAS_ROCM=false
+
+if detect_cuda; then
+    HAS_CUDA=true
+    echo "✓ NVIDIA CUDA detected"
+fi
+
+if detect_vulkan; then
+    HAS_VULKAN=true
+    echo "✓ AMD Vulkan detected"
+fi
+
+if detect_rocm; then
+    HAS_ROCM=true
+    echo "✓ AMD ROCm detected"
+fi
+
+if ! $HAS_CUDA && ! $HAS_VULKAN && ! $HAS_ROCM; then
+    echo "⚠ No GPU backend detected. You'll need to set up CUDA, Vulkan, or ROCm manually."
+fi
+
+echo ""
+
+if $DETECT_ONLY; then
+    echo "Detection complete. Exiting without writing files."
+    exit 0
+fi
+
+# If .env exists and not non-interactive, ask to reconfigure
+if [[ -f "$ENV_FILE" ]] && ! $NON_INTERACTIVE; then
+    read -rp ".env already exists. Reconfigure? [y/N] " REPLY
+    if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
+        echo "Keeping existing $ENV_FILE. Run ./rc.start to start the server."
+        exit 0
+    fi
+fi
+
+# Backend selection
+if $NON_INTERACTIVE; then
+    BACKEND="$ARG_BACKEND"
+    FORK="$ARG_FORK"
+    if [[ -z "$BACKEND" || -z "$FORK" ]]; then
+        usage
+    fi
+else
+    # Suggest backend
+    if $HAS_CUDA && ! $HAS_VULKAN && ! $HAS_ROCM; then
+        SUGGEST="cuda"
+    elif $HAS_VULKAN && ! $HAS_CUDA; then
+        SUGGEST="vulkan"
+    elif $HAS_ROCM && ! $HAS_CUDA; then
+        SUGGEST="rocm"
+    else
+        SUGGEST="vulkan"
+    fi
+
+    echo "Select GPU backend:"
+    echo "  1) cuda    (NVIDIA)"
+    echo "  2) vulkan  (AMD - reliable)"
+    echo "  3) rocm    (AMD - experimental, potentially faster)"
+    read -rp "Backend [${SUGGEST}]: " BACKEND_REPLY
+    BACKEND="${BACKEND_REPLY:-$SUGGEST}"
+
+    # Map numbers to names
+    case "$BACKEND" in
+        1) BACKEND="cuda" ;;
+        2) BACKEND="vulkan" ;;
+        3) BACKEND="rocm" ;;
+    esac
+fi
+
+# Validate backend
+case "$BACKEND" in
+    cuda|vulkan|rocm) ;;
+    *) echo "Invalid backend: $BACKEND"; exit 1 ;;
+esac
+
+# Fork selection
+if ! $NON_INTERACTIVE; then
+    echo ""
+    echo "Select llama.cpp fork:"
+    for i in "${!FORKS[@]}"; do
+        fork="${FORKS[$i]}"
+        desc=$(describe_fork "$fork")
+        echo "  $((i+1))) $fork - $desc"
+    done
+    read -rp "Fork [upstream]: " FORK_REPLY
+    FORK="${FORK_REPLY:-upstream}"
+
+    # Map numbers to names
+    if [[ "$FORK" =~ ^[0-9]+$ ]]; then
+        idx=$((FORK-1))
+        if [[ $idx -ge 0 && $idx -lt ${#FORKS[@]} ]]; then
+            FORK="${FORKS[$idx]}"
+        else
+            FORK="upstream"
+        fi
+    fi
+fi
+
+# Validate fork
+valid_fork=false
+for f in "${FORKS[@]}"; do
+    if [[ "$f" == "$FORK" ]]; then
+        valid_fork=true
+        break
+    fi
+done
+if ! $valid_fork; then
+    echo "Invalid fork: $FORK"
+    exit 1
+fi
+
+# HSA override for AMD
+HSA_OVERRIDE=""
+if [[ "$BACKEND" == "vulkan" || "$BACKEND" == "rocm" ]]; then
+    HSA_OVERRIDE=$(detect_amd_gpu)
+    if ! $NON_INTERACTIVE; then
+        read -rp "HSA_OVERRIDE_GFX_VERSION [${HSA_OVERRIDE}]: " HSA_REPLY
+        HSA_OVERRIDE="${HSA_REPLY:-$HSA_OVERRIDE}"
+    fi
+fi
+
+# Compose file
+COMPOSE_FILE="compose.yml:compose.${BACKEND}.yml"
+
+# Image name
+IMAGE="llama.cpp:server-${BACKEND}-${FORK}"
+
+# Write .env
+cat > "$ENV_FILE" <<EOF
+# Auto-generated by rc.prep on $(date -Iseconds)
+# Edit manually or re-run ./rc.prep
+
+GPU_BACKEND=${BACKEND}
+COMPOSE_FILE=${COMPOSE_FILE}
+LLAMA_IMAGE=${IMAGE}
+EOF
+
+if [[ -n "$HSA_OVERRIDE" ]]; then
+    echo "HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE}" >> "$ENV_FILE"
+fi
+
+# Check if image exists
+if check_image "$IMAGE"; then
+    echo "✓ Docker image ${IMAGE} found locally"
+else
+    echo "⚠ Docker image ${IMAGE} not found. Build it with:"
+    echo "   ./rc.build --fork ${FORK} --backend ${BACKEND}"
+fi
+
+# Symlink config if backend-specific config exists
+if [[ -f "config.${BACKEND}.ini" ]]; then
+    if [[ -L config.ini ]]; then
+        rm config.ini
+    elif [[ -f config.ini && ! -L config.ini ]]; then
+        mv config.ini config.ini.bak
+        echo "Backed up existing config.ini to config.ini.bak"
+    fi
+    ln -sf "config.${BACKEND}.ini" config.ini
+    echo "✓ Linked config.ini -> config.${BACKEND}.ini"
+fi
+
+echo ""
+echo "=== Configuration written to ${ENV_FILE} ==="
+echo "  Backend:     ${BACKEND}"
+echo "  Fork:        ${FORK}"
+echo "  Image:       ${IMAGE}"
+echo "  Compose:     ${COMPOSE_FILE}"
+if [[ -n "$HSA_OVERRIDE" ]]; then
+    echo "  HSA override: ${HSA_OVERRIDE}"
+fi
+echo ""
+echo "Next step: ./rc.start"
