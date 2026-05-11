@@ -1,0 +1,190 @@
+#!/usr/bin/env bash
+# Unified multi-backend build script for llama.cpp forks
+# Usage: ./rc.build --fork <name> --backend <cuda|vulkan|rocm>
+#        ./rc.build --fork <name> --all
+#
+# Forks: upstream, thetom, buun, am17an
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Fork directory mapping
+declare -A FORK_DIRS=(
+    [upstream]="llama.cpp"
+    [thetom]="llama-cpp-turboquant"
+    [buun]="buun-llama-cpp"
+    [am17an]="am17an-llama-cpp-mtp"
+)
+
+# Dockerfile mapping per fork per backend
+declare -A FORK_DOCKERFILES=(
+    [upstream:cuda]=".devops/cuda.Dockerfile"
+    [upstream:vulkan]=".devops/vulkan.Dockerfile"
+    [upstream:rocm]=".devops/rocm.Dockerfile"
+    [thetom:cuda]=".devops/cuda-turbo.Dockerfile"
+    [thetom:vulkan]=".devops/vulkan.Dockerfile"
+    [thetom:rocm]=".devops/rocm.Dockerfile"
+)
+
+# Fallback Dockerfiles in llama-build/ for forks that lack them
+FALLBACK_CUDA="cuda-turbo.Dockerfile"
+FALLBACK_VULKAN="vulkan.Dockerfile"
+FALLBACK_ROCM="rocm.Dockerfile"
+
+FORK=""
+BACKEND=""
+BUILD_ALL=false
+
+usage() {
+    echo "Usage: $0 --fork <name> --backend <cuda|vulkan|rocm>"
+    echo "       $0 --fork <name> --all"
+    echo ""
+    echo "Forks:    upstream, thetom, buun, am17an"
+    echo "Backends: cuda, vulkan, rocm"
+    exit 1
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --fork)
+            FORK="${2:-}"
+            shift 2
+            ;;
+        --backend)
+            BACKEND="${2:-}"
+            shift 2
+            ;;
+        --all)
+            BUILD_ALL=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            echo "Unknown option: $1"
+            usage
+            ;;
+    esac
+done
+
+if [[ -z "$FORK" ]]; then
+    echo "Error: --fork is required"
+    usage
+fi
+
+if ! $BUILD_ALL && [[ -z "$BACKEND" ]]; then
+    echo "Error: --backend or --all is required"
+    usage
+fi
+
+# Validate fork
+if [[ -z "${FORK_DIRS[$FORK]:-}" ]]; then
+    echo "Error: Unknown fork '$FORK'"
+    echo "Available: ${!FORK_DIRS[*]}"
+    exit 1
+fi
+
+FORK_DIR="${FORK_DIRS[$FORK]}"
+FULL_PATH="$SCRIPT_DIR/$FORK_DIR"
+
+# Check if fork exists
+if [[ ! -d "$FULL_PATH" ]]; then
+    echo "Error: Fork directory not found: $FULL_PATH"
+    echo "Run the fetch script first: ./rc.fetch-${FORK}"
+    exit 1
+fi
+
+# Determine Dockerfile to use
+get_dockerfile() {
+    local backend="$1"
+    local key="$FORK:$backend"
+    local dockerfile="${FORK_DOCKERFILES[$key]:-}"
+
+    if [[ -n "$dockerfile" && -f "$FULL_PATH/$dockerfile" ]]; then
+        echo "$dockerfile"
+        return
+    fi
+
+    # Try fallback Dockerfiles
+    case "$backend" in
+        cuda)
+            if [[ -f "$SCRIPT_DIR/$FALLBACK_CUDA" ]]; then
+                echo "$SCRIPT_DIR/$FALLBACK_CUDA"
+                return
+            fi
+            ;;
+        vulkan)
+            if [[ -f "$SCRIPT_DIR/$FALLBACK_VULKAN" ]]; then
+                echo "$SCRIPT_DIR/$FALLBACK_VULKAN"
+                return
+            fi
+            ;;
+        rocm)
+            if [[ -f "$SCRIPT_DIR/$FALLBACK_ROCM" ]]; then
+                echo "$SCRIPT_DIR/$FALLBACK_ROCM"
+                return
+            fi
+            ;;
+    esac
+
+    echo ""
+}
+
+# Build a single backend
+build_backend() {
+    local backend="$1"
+    local image="llama.cpp:server-${backend}-${FORK}"
+    local dockerfile
+    dockerfile=$(get_dockerfile "$backend")
+
+    if [[ -z "$dockerfile" ]]; then
+        echo "⚠ No Dockerfile found for $FORK/$backend. Skipping."
+        return 1
+    fi
+
+    echo "=== Building $image ==="
+    echo "  Fork dir: $FULL_PATH"
+    echo "  Dockerfile: $dockerfile"
+
+    # Pull latest changes
+    if [[ -d "$FULL_PATH/.git" ]]; then
+        (cd "$FULL_PATH" && git pull)
+    fi
+
+    # Determine build target and context
+    local build_args=()
+    local dockerfile_arg="$dockerfile"
+
+    # If using a fallback Dockerfile outside the fork dir, we need to copy it in
+    if [[ "$dockerfile" == "$SCRIPT_DIR"* ]]; then
+        local basename
+        basename=$(basename "$dockerfile")
+        cp "$dockerfile" "$FULL_PATH/.devops/$basename"
+        dockerfile_arg=".devops/$basename"
+    fi
+
+    # Build
+    (cd "$FULL_PATH" && \
+        docker build \
+            -f "$dockerfile_arg" \
+            --target server \
+            -t "$image" \
+            . \
+    )
+
+    echo "✓ Built $image"
+}
+
+# Build
+if $BUILD_ALL; then
+    for b in cuda vulkan rocm; do
+        build_backend "$b" || true
+    done
+else
+    build_backend "$BACKEND"
+fi
+
+echo ""
+echo "=== Build complete ==="

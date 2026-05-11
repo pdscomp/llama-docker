@@ -1,0 +1,3 @@
+#!/bin/bash -x
+cd "$(dirname "$0")"
+./rc.build --fork am17an --backend vulkan

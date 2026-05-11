@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Patch TurboQuant compile args into a fork's .devops/cuda.Dockerfile
+# Usage: ./rc.patch-turboquant <fork-dir>
+# Example: ./rc.patch-turboquant llama-cpp-turboquant
+
+set -euo pipefail
+
+FORK_DIR="${1:-}"
+if [[ -z "$FORK_DIR" ]]; then
+    echo "Usage: $0 <fork-directory>"
+    echo "Example: $0 llama-cpp-turboquant"
+    exit 1
+fi
+
+if [[ ! -d "$FORK_DIR" ]]; then
+    echo "Error: Directory $FORK_DIR not found"
+    exit 1
+fi
+
+DOCKERFILE="$FORK_DIR/.devops/cuda.Dockerfile"
+if [[ ! -f "$DOCKERFILE" ]]; then
+    echo "Warning: $DOCKERFILE not found. Nothing to patch."
+    exit 0
+fi
+
+echo "=== Patching TurboQuant into $DOCKERFILE ==="
+
+# Check if already patched
+if grep -q "GGML_CUDA_FA_ALL_QUANTS" "$DOCKERFILE"; then
+    echo "Already patched (GGML_CUDA_FA_ALL_QUANTS found). Skipping."
+    exit 0
+fi
+
+# Patch: add -DGGML_CUDA_FA_ALL_QUANTS=ON to cmake flags
+sed -i 's/-DGGML_CUDA_FA=ON/-DGGML_CUDA_FA=ON -DGGML_CUDA_FA_ALL_QUANTS=ON/g' "$DOCKERFILE"
+
+echo "✓ Patched $DOCKERFILE"
